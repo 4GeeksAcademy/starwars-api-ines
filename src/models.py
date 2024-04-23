@@ -7,7 +7,6 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True) 
     email = db.Column(db.String(250), unique=True, nullable=False)
     password = db.Column(db.String(50), nullable=False)
-    is_active = db.Column(db.Boolean(), unique=False, nullable=False, default=False)
     favorites_characters = db.relationship('FavoriteCharacter', backref='users', lazy=True)
     favorites_planets = db.relationship('FavoritePlanet', backref='users', lazy=True)
     favorites_vehicles = db.relationship('FavoriteVehicle', backref='users', lazy=True)
