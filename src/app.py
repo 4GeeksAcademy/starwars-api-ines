@@ -36,6 +36,35 @@ def handle_invalid_usage(error):
 def sitemap():
     return generate_sitemap(app)
 
+@app.route("/signup", methods=["POST"])
+def signup():
+    email = request.json.get("email", None)
+    password = request.json.get("password", None)
+    user_exist = User.query.filter_by(email=email).first()
+    if user_exist is None: 
+        new_user = User(
+            email=email, 
+            password=password
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        access_token = create_access_token(identity=email)
+        return jsonify(access_token=access_token), 200
+    else:
+        return jsonify({"msg": "User has already exist"}), 400
+    
+@app.route("/login", methods=["POST"])
+def login():
+    email = request.json.get("email", None)
+    password = request.json.get("password", None)
+    user_exist = User.query.filter_by(email=email).first()
+    if user_exist is None:
+        return jsonify({"msg": "Email doesnt exist"}), 404
+    if email != user_exist.email or password != user_exist.password:
+        return jsonify({"msg": "Bad email or password"}), 401
+    access_token = create_access_token(identity=email)
+    return jsonify(access_token=access_token)
+
 @app.route('/users', methods=['GET'])
 def get_all_users():
     all_users = User.query.all()
@@ -55,20 +84,6 @@ def get_one_user(users_id):
         return jsonify({"msg":"User not exist"}), 404
     return jsonify(user.serialize()), 200
 
-@app.route('/user', methods=['POST'])
-def create_one_user():
-    body = request.json
-    user = User.query.filter_by(email=body["email"]).first()
-    if not body:
-            return jsonify({'msg': 'Bad Request'}), 400
-    if user is None:
-        new_user = User(email = body["email"], password = body["password"])
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({"msg": "User created successfully"}), 201
-    else:
-        return jsonify({"msg": "User has already exist"}), 400
-
 @app.route('/users/favorites', methods=['GET'])
 @jwt_required()
 def get_all_favorites():
@@ -81,12 +96,10 @@ def get_all_favorites():
     all_favorite_character_list = list(map(lambda item: item.serialize(), all_favorite_character))
     all_favorite_planet_list = list(map(lambda item: item.serialize(), all_favorite_planet))
     all_favorite_vehicle_list = list(map(lambda item: item.serialize(), all_favorite_vehicle))
-
-    if user_exist is None: 
-        return jsonify({"msg": "This user does not exist"}), 401
-    
+   
     if all_favorite_character_list == [] and all_favorite_planet_list == [] and all_favorite_vehicle_list == []:
-        return jsonify({"msg":"Favorites not found"}), 404
+        return jsonify({"msg":"There are not favorites"}), 404
+    
     response_body = {
         "msg": "ok",
         "results": [
@@ -147,11 +160,7 @@ def add_favorite_character(people_id):
     user_exist = User.query.filter_by(email=email).first()
     user_id = user_exist.id
     character_exist = Character.query.filter_by(id=people_id).first()
-    if user_exist is None and character_exist is None:
-        return jsonify({'msg': 'There are not users or characters'}), 400
-    elif user_exist is None:
-        return ({"msg": "This user doesn't exist"}), 400
-    elif character_exist is None:
+    if character_exist is None:
         return ({"msg": "This character doesn't exist"}), 400
     else:
         exist_favorite_character = FavoriteCharacter.query.filter_by(character_id=people_id, user_id=user_id).first()
@@ -170,10 +179,8 @@ def delete_favorite_character(people_id):
     user_exist = User.query.filter_by(email=email).first()
     user_id = user_exist.id
     character_exist = Character.query.filter_by(id=people_id).first()
-    if user_exist is None and character_exist is None:
-        return jsonify({'msg': 'There are not users or favorites characters'}), 400
-    elif user_exist is None:
-        return ({"msg": "This user doesn't exist"}), 400
+    if character_exist is None:
+        return jsonify({"msg": "This character doesn't exist"}), 400
     else:
         favorite_character_to_delete = FavoriteCharacter.query.filter_by(character_id=people_id, user_id=user_id).first()
         if favorite_character_to_delete:
@@ -233,11 +240,7 @@ def add_favorite_planet(planet_id):
     user_exist = User.query.filter_by(email=email).first()
     user_id = user_exist.id
     planet_exist = Planet.query.filter_by(id=planet_id).first()
-    if user_exist is None and planet_exist is None:
-        return jsonify({'msg': 'There are not users or planets'}), 400
-    elif user_exist is None:
-        return ({"msg": "This user doesn't exist"}), 400
-    elif planet_exist is None:
+    if planet_exist is None:
         return ({"msg": "This planet doesn't exist"}), 400
     else:
         exist_favorite_planet = FavoritePlanet.query.filter_by(planet_id=planet_id, user_id=user_id).first()
@@ -256,10 +259,8 @@ def delete_favorite_planet(planet_id):
     user_exist = User.query.filter_by(email=email).first()
     user_id = user_exist.id
     planet_exist = Planet.query.filter_by(id=planet_id).first()
-    if user_exist is None and planet_exist is None:
-        return jsonify({'msg': 'There are not users or favorites planets'}), 400
-    elif user_exist is None:
-        return ({"msg": "This user doesn't exist"}), 400
+    if planet_exist is None:
+        return jsonify({'msg': 'There are not favorites planets'}), 400
     else:
         favorite_planet_to_delete = FavoritePlanet.query.filter_by(planet_id=planet_id, user_id=user_id).first()
         if favorite_planet_to_delete:
@@ -319,12 +320,8 @@ def add_favorite_vehicle(vehicle_id):
     user_exist = User.query.filter_by(email=email).first()
     user_id = user_exist.id
     vehicle_exist = Vehicle.query.filter_by(id=vehicle_id).first()
-    if user_exist is None and vehicle_exist is None:
-        return jsonify({'msg': 'There are not users or vehicles'}), 400
-    elif user_exist is None:
-        return ({"msg": "This user doesn't exist"}), 400
-    elif vehicle_exist is None:
-        return ({"msg": "This vehicle doesn't exist"}), 400
+    if vehicle_exist is None:
+        return jsonify({"msg": "This vehicle doesn't exist"}), 400
     else:
         exist_favorite_vehicle = FavoriteVehicle.query.filter_by(vehicle_id=vehicle_id, user_id=user_id).first()
         if exist_favorite_vehicle is None:
@@ -342,10 +339,8 @@ def delete_favorite_vehicle(vehicle_id):
     user_exist = User.query.filter_by(email=email).first()
     user_id = user_exist.id
     vehicle_exist = Vehicle.query.filter_by(id=vehicle_id).first()
-    if user_exist is None and vehicle_exist is None:
-        return jsonify({'msg': 'There are not users or favorites vehicles'}), 400
-    elif user_exist is None:
-        return ({"msg": "This user doesn't exist"}), 400
+    if vehicle_exist is None:
+        return ({"msg": "This vehicle doesn't exist"}), 400
     else:
         favorite_vehicle_to_delete = FavoriteVehicle.query.filter_by(vehicle_id=vehicle_id, user_id=user_id).first()
         if favorite_vehicle_to_delete:
@@ -354,36 +349,6 @@ def delete_favorite_vehicle(vehicle_id):
             return jsonify({"msg": "Vehicle deleted to favorites"}), 200
         else:  
             return ({"msg": "This vehicle doesn't exist in favorites"}), 400
-
-@app.route("/login", methods=["POST"])
-def login():
-    email = request.json.get("email", None)
-    password = request.json.get("password", None)
-    user = User.query.filter_by(email=email).first()
-    if user is None:
-        return jsonify({"msg": "Email doesnt exist"}), 404
-    if email != user.email or password != user.password:
-        return jsonify({"msg": "Bad email or password"}), 401
-    access_token = create_access_token(identity=email)
-    return jsonify(access_token=access_token)
-
-@app.route("/signup", methods=["POST"])
-def signup():
-    email = request.json.get("email", None)
-    password = request.json.get("password", None)
-    user_exist = User.query.filter_by(email=email).first()
-    
-    if user_exist is None: 
-            new_user = User(
-                email=email, 
-                password=password
-            )
-            db.session.add(new_user)
-            db.session.commit()
-            access_token = create_access_token(identity=email)
-            return jsonify(access_token=access_token), 200
-    else:
-        return jsonify({"error": "User already exist"}), 400
 
 # this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
