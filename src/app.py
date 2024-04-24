@@ -6,9 +6,13 @@ from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
 from models import db, User, Character, Planet, Vehicle, FavoriteCharacter, FavoritePlanet, FavoriteVehicle
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager 
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+
+app.config["JWT_SECRET_KEY"] = "super-secret"
+jwt = JWTManager(app)
 
 db_url = os.getenv("DATABASE_URL")
 if db_url is not None:
@@ -65,14 +69,22 @@ def create_one_user():
     else:
         return jsonify({"msg": "User has already exist"}), 400
 
-@app.route('/users/favorites/<int:user_id>', methods=['GET'])
-def get_all_favorites(user_id):
+@app.route('/users/favorites', methods=['GET'])
+@jwt_required()
+def get_all_favorites():
+    email =  get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     all_favorite_character = FavoriteCharacter.query.filter_by(user_id=user_id).all()
     all_favorite_planet = FavoritePlanet.query.filter_by(user_id=user_id).all()
     all_favorite_vehicle = FavoriteVehicle.query.filter_by(user_id=user_id).all()
     all_favorite_character_list = list(map(lambda item: item.serialize(), all_favorite_character))
     all_favorite_planet_list = list(map(lambda item: item.serialize(), all_favorite_planet))
     all_favorite_vehicle_list = list(map(lambda item: item.serialize(), all_favorite_vehicle))
+
+    if user_exist is None: 
+        return jsonify({"msg": "This user does not exist"}), 401
+    
     if all_favorite_character_list == [] and all_favorite_planet_list == [] and all_favorite_vehicle_list == []:
         return jsonify({"msg":"Favorites not found"}), 404
     response_body = {
@@ -129,9 +141,11 @@ def delete_character(people_id):
         return jsonify({"msg": "Character not found"}), 404
 
 @app.route("/favorite/people/<int:people_id>", methods=["POST"])
+@jwt_required()
 def add_favorite_character(people_id): 
-    body = request.json
-    user_exist = User.query.filter_by(id=body["user_id"]).first()
+    email = get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     character_exist = Character.query.filter_by(id=people_id).first()
     if user_exist is None and character_exist is None:
         return jsonify({'msg': 'There are not users or characters'}), 400
@@ -140,9 +154,9 @@ def add_favorite_character(people_id):
     elif character_exist is None:
         return ({"msg": "This character doesn't exist"}), 400
     else:
-        exist_favorite_character = FavoriteCharacter.query.filter_by(character_id=people_id, user_id=body["user_id"]).first()
+        exist_favorite_character = FavoriteCharacter.query.filter_by(character_id=people_id, user_id=user_id).first()
         if exist_favorite_character is None:
-            new_favorite_character = FavoriteCharacter(character_id=people_id, user_id=body["user_id"])
+            new_favorite_character = FavoriteCharacter(character_id=people_id, user_id=user_id)
             db.session.add(new_favorite_character)
             db.session.commit()
             return jsonify({"msg": "Character added to favorites"}), 201
@@ -150,16 +164,18 @@ def add_favorite_character(people_id):
             return jsonify({'msg': 'Character has already exist in favorites'}), 400
         
 @app.route('/favorite/people/<int:people_id>', methods=['DELETE'])
+@jwt_required()
 def delete_favorite_character(people_id): 
-    body = request.json
-    user_exist = User.query.filter_by(id=body["user_id"]).first()
+    email = get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     character_exist = Character.query.filter_by(id=people_id).first()
     if user_exist is None and character_exist is None:
         return jsonify({'msg': 'There are not users or favorites characters'}), 400
     elif user_exist is None:
         return ({"msg": "This user doesn't exist"}), 400
     else:
-        favorite_character_to_delete = FavoriteCharacter.query.filter_by(character_id=people_id, user_id=body["user_id"]).first()
+        favorite_character_to_delete = FavoriteCharacter.query.filter_by(character_id=people_id, user_id=user_id).first()
         if favorite_character_to_delete:
             db.session.delete(favorite_character_to_delete)
             db.session.commit()
@@ -211,9 +227,11 @@ def delete_planet(planets_id):
         return jsonify({"msg": "Planet not found"}), 404 
 
 @app.route("/favorite/planet/<int:planet_id>", methods=["POST"])
+@jwt_required()
 def add_favorite_planet(planet_id): 
-    body = request.json
-    user_exist = User.query.filter_by(id=body["user_id"]).first()
+    email = get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     planet_exist = Planet.query.filter_by(id=planet_id).first()
     if user_exist is None and planet_exist is None:
         return jsonify({'msg': 'There are not users or planets'}), 400
@@ -222,9 +240,9 @@ def add_favorite_planet(planet_id):
     elif planet_exist is None:
         return ({"msg": "This planet doesn't exist"}), 400
     else:
-        exist_favorite_planet = FavoritePlanet.query.filter_by(planet_id=planet_id, user_id=body["user_id"]).first()
+        exist_favorite_planet = FavoritePlanet.query.filter_by(planet_id=planet_id, user_id=user_id).first()
         if exist_favorite_planet is None:
-            new_favorite_planet = FavoritePlanet(planet_id=planet_id, user_id=body["user_id"])
+            new_favorite_planet = FavoritePlanet(planet_id=planet_id, user_id=user_id)
             db.session.add(new_favorite_planet)
             db.session.commit()
             return jsonify({"msg": "Planet added to favorites"}), 201
@@ -232,16 +250,18 @@ def add_favorite_planet(planet_id):
             return jsonify({'msg': 'Planet has already exist in favorites'}), 400
 
 @app.route('/favorite/planet/<int:planet_id>', methods=['DELETE'])
+@jwt_required()
 def delete_favorite_planet(planet_id): 
-    body = request.json
-    user_exist = User.query.filter_by(id=body["user_id"]).first()
+    email = get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     planet_exist = Planet.query.filter_by(id=planet_id).first()
     if user_exist is None and planet_exist is None:
         return jsonify({'msg': 'There are not users or favorites planets'}), 400
     elif user_exist is None:
         return ({"msg": "This user doesn't exist"}), 400
     else:
-        favorite_planet_to_delete = FavoritePlanet.query.filter_by(planet_id=planet_id, user_id=body["user_id"]).first()
+        favorite_planet_to_delete = FavoritePlanet.query.filter_by(planet_id=planet_id, user_id=user_id).first()
         if favorite_planet_to_delete:
             db.session.delete(favorite_planet_to_delete)
             db.session.commit()
@@ -293,9 +313,11 @@ def delete_vehicle(vehicles_id):
         return jsonify({"msg": "Vehicle not found"}), 404 
 
 @app.route("/favorite/vehicle/<int:vehicle_id>", methods=["POST"])
+@jwt_required()
 def add_favorite_vehicle(vehicle_id): 
-    body = request.json
-    user_exist = User.query.filter_by(id=body["user_id"]).first()
+    email = get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     vehicle_exist = Vehicle.query.filter_by(id=vehicle_id).first()
     if user_exist is None and vehicle_exist is None:
         return jsonify({'msg': 'There are not users or vehicles'}), 400
@@ -304,9 +326,9 @@ def add_favorite_vehicle(vehicle_id):
     elif vehicle_exist is None:
         return ({"msg": "This vehicle doesn't exist"}), 400
     else:
-        exist_favorite_vehicle = FavoriteVehicle.query.filter_by(vehicle_id=vehicle_id, user_id=body["user_id"]).first()
+        exist_favorite_vehicle = FavoriteVehicle.query.filter_by(vehicle_id=vehicle_id, user_id=user_id).first()
         if exist_favorite_vehicle is None:
-            new_favorite_vehicle = FavoriteVehicle(vehicle_id=vehicle_id, user_id=body["user_id"])
+            new_favorite_vehicle = FavoriteVehicle(vehicle_id=vehicle_id, user_id=user_id)
             db.session.add(new_favorite_vehicle)
             db.session.commit()
             return jsonify({"msg": "Vehicle added to favorites"}), 201
@@ -314,22 +336,54 @@ def add_favorite_vehicle(vehicle_id):
             return jsonify({'msg': 'Vechile has already exist in favorites'}), 400
 
 @app.route('/favorite/vehicle/<int:vehicle_id>', methods=['DELETE'])
+@jwt_required()
 def delete_favorite_vehicle(vehicle_id): 
-    body = request.json
-    user_exist = User.query.filter_by(id=body["user_id"]).first()
+    email = get_jwt_identity()
+    user_exist = User.query.filter_by(email=email).first()
+    user_id = user_exist.id
     vehicle_exist = Vehicle.query.filter_by(id=vehicle_id).first()
     if user_exist is None and vehicle_exist is None:
         return jsonify({'msg': 'There are not users or favorites vehicles'}), 400
     elif user_exist is None:
         return ({"msg": "This user doesn't exist"}), 400
     else:
-        favorite_vehicle_to_delete = FavoriteVehicle.query.filter_by(vehicle_id=vehicle_id, user_id=body["user_id"]).first()
+        favorite_vehicle_to_delete = FavoriteVehicle.query.filter_by(vehicle_id=vehicle_id, user_id=user_id).first()
         if favorite_vehicle_to_delete:
             db.session.delete(favorite_vehicle_to_delete)
             db.session.commit()
             return jsonify({"msg": "Vehicle deleted to favorites"}), 200
         else:  
             return ({"msg": "This vehicle doesn't exist in favorites"}), 400
+
+@app.route("/login", methods=["POST"])
+def login():
+    email = request.json.get("email", None)
+    password = request.json.get("password", None)
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        return jsonify({"msg": "Email doesnt exist"}), 404
+    if email != user.email or password != user.password:
+        return jsonify({"msg": "Bad email or password"}), 401
+    access_token = create_access_token(identity=email)
+    return jsonify(access_token=access_token)
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    email = request.json.get("email", None)
+    password = request.json.get("password", None)
+    user_exist = User.query.filter_by(email=email).first()
+    
+    if user_exist is None: 
+            new_user = User(
+                email=email, 
+                password=password
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            access_token = create_access_token(identity=email)
+            return jsonify(access_token=access_token), 200
+    else:
+        return jsonify({"error": "User already exist"}), 400
 
 # this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
